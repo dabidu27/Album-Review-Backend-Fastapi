@@ -117,39 +117,34 @@ class UserManager:
         return albums
 
     # FOLLOWERS FUNCTIONS
-    def follow_user(self, follower_id, followed_id):
+    async def follow_user(self, follower_id, followed_id):
 
         if follower_id == followed_id:
             return False, "You cannot follow yourself"
 
-        with self.connect() as conn:
+        try:
 
-            cursor = conn.cursor()
-            try:
-
-                cursor.execute(
-                    "INSERT INTO followers (follower_id, followed_id) VALUES (?, ?)",
-                    (follower_id, followed_id),
-                )
-                conn.commit()
-                return True, "User followed successfully"
-
-            except sqlite3.IntegrityError:
-
-                return False, "You already follow this user"
-
-    def unfollow_user(self, follower_id, followed_id):
-
-        with self.connect() as conn:
-
-            cursor = conn.cursor()
-
-            cursor.execute(
-                "DELETE FROM followers WHERE follower_id = ? AND followed_id = ?",
-                (follower_id, followed_id),
+            await database.execute(
+                "INSERT INTO followers (follower_id, followed_id) VALUES (:follower_id, :followed_id)",
+                {
+                    "follower_id": follower_id,
+                    "followed_id": followed_id,
+                },
             )
-            conn.commit()
-            return True, "Successfully unfollowed user"
+            return True, "User followed successfully"
+
+        except Exception:
+
+            return False, "You already follow this user"
+
+    async def unfollow_user(self, follower_id, followed_id):
+
+        await database.execute(
+            "DELETE FROM followers WHERE follower_id = :follower_id AND followed_id = :followed_id",
+            {"follower_id": follower_id, "followed_id": followed_id},
+        )
+
+        return True, "Successfully unfollowed user"
 
     def get_followers(self, user_id):
 

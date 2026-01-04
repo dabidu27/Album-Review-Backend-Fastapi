@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from init_db import database
 from fastapi import FastAPI, status, Response
-from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut
+from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete
 
 
 app = FastAPI()
@@ -198,27 +198,28 @@ async def follow(followed_username: str, follow: FollowerCreate, response: Respo
 
     followed_id = await database.fetch_one("SELECT id FROM users WHERE username = :username", {'username': followed_username})
 
-    success, message = user_manager.follow_user(follower_id, followed_id)
+    success, message = await user_manager.follow_user(follower_id, followed_id)
 
     response.status_code = status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
 
     return {"message": message}
 
 
-@app.route("/user/<followed_id>/unfollow", methods=["POST"])
-def unfollow(followed_id):
+@app.delete("/user/{followed_id}/unfollow")
+async def unfollow(followed_id: int, follower: FollowDelete, response: Response):
 
-    follower_id = session.get("user_id")
+    follower_id = follower.user_id
 
     if not follower_id:
 
-        return jsonify({"error": "User has to be logged in"}), 401
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return {"error": "User has to be logged in"}
 
-    success, message = user_manager.unfollow_user(follower_id, followed_id)
+    success, message = await user_manager.unfollow_user(follower_id, followed_id)
 
-    status = 200 if success else 400
+    response.status_code = status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
 
-    return jsonify({"message": message}), status
+    return {"message": message}
 
 
 @app.route("/user/<user_id>/get_followers", methods=["GET"])

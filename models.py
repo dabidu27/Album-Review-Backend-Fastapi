@@ -38,3 +38,8 @@ class FollowerCreate(BaseModel):
 class FavoritesOut(BaseModel):
 
     album_id: str
+
+
+class FollowDelete(BaseModel):
+
+    user_id: int
