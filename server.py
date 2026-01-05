@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from init_db import database
 from fastapi import FastAPI, status, Response
-from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, FollowersOut, FollowingOut, UserProfileOut
+from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, FollowersOut, FollowingOut, UserProfileOut, ActivityOut
 
 
 app = FastAPI()
@@ -289,84 +289,53 @@ async def get_profile(username, response: Response):
         #the data types, so serialization is done by Fastapi
 
 
-@app.route("/user/profile", methods=["GET"])
-def get_own_profile():
+@app.get("/user/{user_id}/profile", response_model=UserProfileOut)
+async def get_own_profile(user_id: int, response: Response):
 
-    user_id = session.get("user_id")
-
-    with user_manager.connect() as conn:
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT id, username, bio, picture FROM users WHERE id = ?", (user_id,)
+        user = await database.fetch_one(
+            "SELECT id, username, bio, picture FROM users WHERE id = :user_id", {'user_id': user_id}
         )
-        user = cursor.fetchone()
+    
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return {"error": "User not found"}
 
-        user_data = {
-            "id": user[0],
-            "username": user[1],
-            "bio": user[2],
-            "picture": user[3],
-        }
-
-        cursor.execute(
+        favorites = await database.fetch_all(
             """
-            SELECT a.album_name, a.artist_name, a.release_date, a.cover
+            SELECT a.album_name as album_name, a.artist_name as artist_name, a.release_date as release_date, a.cover as cover
             FROM favorites f
             JOIN albums a ON f.album_id = a.album_id
-            WHERE f.user_id = ?
+            WHERE f.user_id = :user_id
         """,
-            (user_data["id"],),
+            {'user_id': user['id']}
         )
-        favorites = cursor.fetchall()
-        user_data["favorites"] = [
-            {
-                "album_name": fav[0],
-                "artist_name": fav[1],
-                "release_date": fav[2],
-                "cover": fav[3],
-            }
-            for fav in favorites
-        ]
+    
+        user["favorites"] = favorites
 
-        cursor.execute(
-            "SELECT COUNT(*) FROM followers WHERE followed_id = ?", (user_data["id"],)
+        row = await database.fetch_one(
+            "SELECT COUNT(*) as count FROM followers WHERE followed_id = :user_id", {'user_id': user['id']}
         )
-        user_data["followers_count"] = cursor.fetchone()[0]
+        user["followers_count"] = row['count']
 
-        cursor.execute(
-            "SELECT COUNT(*) FROM followers WHERE follower_id = ?", (user_data["id"],)
+        row = await database.fetch_one(
+            "SELECT COUNT(*) as count FROM followers WHERE follower_id = :user_id", {'user_id': user['id']}
         )
-        user_data["following_count"] = cursor.fetchone()[0]
+        user["following_count"] = row['count']
 
-        reviews = review_manager.get_user_reviews(user[0])
-        user_data["reviews"] = reviews
+        reviews = await review_manager.get_user_reviews(user['id'])
+        user["reviews"] = reviews
 
-        return jsonify(user_data)
+        response.status_code = status.HTTP_200_OK
+        return user
 
 
-@app.route("/user/friends_activity")
-def friends_activity():
+@app.get("/user/{user_id}/friends_activity", response_model=list[ActivityOut])
+async def friends_activity(user_id: int, response: Response):
 
-    user_id = session.get("user_id")
-    recent_activity = review_manager.friends_recent_activity(user_id)
+    recent_activity = await review_manager.friends_recent_activity(user_id)
 
-    recent_activity_list = []
-
-    for activity in recent_activity:
-        recent_activity_list.append(
-            {
-                "album_name": activity[0],
-                "artist_name": activity[1],
-                "cover": activity[2],
-                "rating": activity[3],
-                "review": activity[4],
-            }
-        )
-
-    return jsonify({"recent_activity": recent_activity_list})
+    response.status_code = status.HTTP_200_OK
+    return recent_activity
 
 
 @app.route("/user/update_bio", methods=["POST"])

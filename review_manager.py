@@ -71,29 +71,21 @@ class ReviewManager:
         )
         return reviews
 
-    def friends_recent_activity(self, user_id):
+    async def friends_recent_activity(self, user_id):
 
-        recent_activity = []
-        with self.connect() as conn:
+        query = """
+        SELECT
+            a.album_name,
+            a.artist_name,
+            a.cover,
+            r.rating,
+            r.review
+        FROM followers f
+        JOIN reviews r ON r.user_id = f.followed_id
+        JOIN albums a ON a.album_id = r.album_id
+        WHERE f.follower_id = :user_id
+          AND COALESCE(r.updated_at, r.created_at) >= datetime('now', '-7 days')
+        ORDER BY COALESCE(r.updated_at, r.created_at) DESC
+        """
 
-            cursor = conn.cursor()
-
-            cursor.execute(
-                "SELECT followed_id FROM followers WHERE follower_id = ?", (user_id,)
-            )
-            friends = cursor.fetchall()
-            friends = [id[0] for id in friends]
-
-            for friend_id in friends:
-
-                cursor.execute(
-                    """
-                    SELECT a.album_name, a.artist_name, a.cover, r.rating, r.review FROM reviews r JOIN albums a ON r.album_id = a.album_id WHERE r.user_id = ?
-                    AND COALESCE(r.updated_at, r.created_at) >= datetime('now', '-7 days')
-                    ORDER BY COALESCE(updated_at, created_at) DESC
-                    """,
-                    (friend_id,),
-                )
-                recent_activity.extend(cursor.fetchall())
-
-        return recent_activity
+        return database.fetch_all(query, {"use_id": user_id})

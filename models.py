@@ -75,3 +75,12 @@ class UserProfileOut(BaseModel):
     followers_count: int
     following_count: int
     reviews: list[ReviewOut]
+
+
+class ActivityOut(BaseModel):
+
+    album_name: str
+    artist_name: str
+    cover: str
+    rating: int
+    review: Optional[str] = ""
