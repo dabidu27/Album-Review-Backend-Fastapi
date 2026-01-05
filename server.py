@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from init_db import database
 from fastapi import FastAPI, status, Response
-from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, FollowersOut, FollowingOut
+from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, FollowersOut, FollowingOut, UserProfileOut
 
 
 app = FastAPI()
@@ -223,7 +223,7 @@ async def unfollow(followed_id: int, follower: FollowDelete, response: Response)
 
 
 @app.get("/user/{user_id}/get_followers", response_model=list[FollowersOut], status_code=status.HTTP_200_OK)
-async def follower(user_id: int):
+async def get_follower(user_id: int):
     followers = await user_manager.get_followers(user_id)
     followers_return : list[FollowersOut] = []
     for follower in followers:
@@ -232,7 +232,7 @@ async def follower(user_id: int):
 
 
 @app.get("/user/{user_id}/get_following", response_model=list[FollowingOut], status_code=status.HTTP_200_OK)
-async def following(user_id):
+async def get_following(user_id):
     followings = await user_manager.get_following(user_id)
     followings_return: list[FollowingOut] = []
     for following in followings:
@@ -240,60 +240,53 @@ async def following(user_id):
     return followings_return
 
 # USER PROFILE
-@app.route("/user/<username>/profile", methods=["GET"])
-def get_profile(username):
-    with user_manager.connect() as conn:
-        cursor = conn.cursor()
+@app.get("/user/{username}/profile", response_model=UserProfileOut)
+async def get_profile(username, response: Response):
 
-        cursor.execute(
-            "SELECT id, username, bio, picture FROM users WHERE LOWER(username) = ?",
-            (username.lower(),),
+        user = await database.fetch_one(
+            "SELECT id, username, bio, picture FROM users WHERE LOWER(username) = :username",
+            {'username': username.lower()},
         )
-        user = cursor.fetchone()
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            response.status_code = status.HTTP_404_NOT_FOUND
+            return {"error": "User not found"}
 
         user_data = {
-            "id": user[0],
-            "username": user[1],
-            "bio": user[2],
-            "picture": user[3],
+            "id": user["id"],
+            "username": user["username"],
+            "bio": user["bio"],
+            "picture": user["picture"],
         }
 
-        cursor.execute(
+        favorites = await database.fetch_all(
             """
-            SELECT a.album_name, a.artist_name, a.release_date, a.cover
+            SELECT a.album_name as album_name, a.artist_name as artist_name, a.release_date as release_date, a.cover as cover
             FROM favorites f
             JOIN albums a ON f.album_id = a.album_id
-            WHERE f.user_id = ?
+            WHERE f.user_id = :user_id
         """,
-            (user_data["id"],),
+            {'user_id': user_data["id"]}
         )
-        favorites = cursor.fetchall()
-        user_data["favorites"] = [
-            {
-                "album_name": fav[0],
-                "artist_name": fav[1],
-                "release_date": fav[2],
-                "cover": fav[3],
-            }
-            for fav in favorites
-        ]
+        user_data["favorites"] = favorites #we have favorites being a list[FavoritesOut] in the Pydantic model for UserProfileOut
+        #if the key of the dict returned by the database (called favorites) in this case match the Pydantic model fields
+        #(the fields of FavoritesOut in this case) the transition from dict to Pydantic model is automatically
 
-        cursor.execute(
-            "SELECT COUNT(*) FROM followers WHERE followed_id = ?", (user_data["id"],)
+        row = await database.fetch_one(
+            "SELECT COUNT(*) as count FROM followers WHERE followed_id = :user_id", {'user_id': user_data["id"]}
         )
-        user_data["followers_count"] = cursor.fetchone()[0]
+        user_data["followers_count"] = row['count']
 
-        cursor.execute(
-            "SELECT COUNT(*) FROM followers WHERE follower_id = ?", (user_data["id"],)
+        row = await database.fetch_one(
+            "SELECT COUNT(*) as count FROM followers WHERE follower_id = :user_id", {'user_id': user_data["id"]}
         )
-        user_data["following_count"] = cursor.fetchone()[0]
+        user_data["following_count"] = row['count']
 
-        reviews = review_manager.get_user_reviews(user[0])
-        user_data["reviews"] = reviews
+        reviews = await review_manager.get_user_reviews(user["id"])
+        user_data["reviews"] = reviews #same as with favorites
 
-        return jsonify(user_data)
+        response.status_code = status.HTTP_200_OK
+        return user_data #now the user_data dictionary matches the name of the keys with the fields of the Pydantic model and
+        #the data types, so serialization is done by Fastapi
 
 
 @app.route("/user/profile", methods=["GET"])

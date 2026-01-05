@@ -25,6 +25,14 @@ class ReviewDelete(BaseModel):
     # we don t need album_id here because it comes through the request
 
 
+class ReviewOut(BaseModel):
+    album_name: str
+    artist_name: str
+    cover: str
+    rating: int
+    review: Optional[str]
+
+
 class FavoriteCreate(BaseModel):
 
     user_id: int
@@ -55,3 +63,15 @@ class FollowingOut(BaseModel):
 
     id: int
     username: str
+
+
+class UserProfileOut(BaseModel):
+
+    id: int
+    username: str
+    bio: str
+    picture: str
+    favorites: list[FavoritesOut]
+    followers_count: int
+    following_count: int
+    reviews: list[ReviewOut]

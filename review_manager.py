@@ -63,17 +63,13 @@ class ReviewManager:
             )
             return cursor.fetchall()
 
-    def get_user_reviews(self, user_id):
+    async def get_user_reviews(self, user_id):
 
-        with self.connect() as conn:
-
-            cursor = conn.cursor()
-
-            cursor.execute(
-                "SELECT a.album_name, a.artist_name, a.cover, r.rating, r.review FROM reviews r JOIN albums a ON r.album_id = a.album_id WHERE user_id = ?",
-                (user_id,),
-            )
-            return cursor.fetchall()
+        reviews = await database.fetch_all(
+            "SELECT a.album_name, a.artist_name, a.cover, r.rating, r.review FROM reviews r JOIN albums a ON r.album_id = a.album_id WHERE user_id = :user_id",
+            {"user_id": user_id},
+        )
+        return reviews
 
     def friends_recent_activity(self, user_id):
 
