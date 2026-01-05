@@ -340,7 +340,7 @@ async def friends_activity(user_id: int, response: Response):
     return recent_activity
 
 
-@app.put("/user/{user_id}/update_bio")
+@app.put("/user/{user_id}/update_bio", status_code=status.HTTP_200_OK)
 async def update_bio(user_id: int, bio: BioUpdate, response: Response):
 
     if not user_id:
@@ -351,11 +351,10 @@ async def update_bio(user_id: int, bio: BioUpdate, response: Response):
 
     await database.execute("UPDATE users SET bio = :bio WHERE id = :id", {'bio': bio_text, 'id': user_id})
 
-    response.status_code = status.HTTP_200_OK
     return {"message": "Bio successfully updated"}
 
 
-@app.put("/user/{user_id}/update_picture")
+@app.put("/user/{user_id}/update_picture", status_code=status.HTTP_200_OK)
 async def update_picture(user_id: int, picture: PictureUpdate, response: Response):
 
     if not user_id:
@@ -365,47 +364,34 @@ async def update_picture(user_id: int, picture: PictureUpdate, response: Respons
     picture_url = picture.picture
 
     await database.execute("UPDATE users SET picture = :picture WHERE id = :id", {'picture': picture_url, 'id': user_id})
-    response.status_code = status.HTTP_200_OK
 
     return {"message": "Profile picture successfully updated"}
 
-
 # RECOMANDATION ENGINE
 
-
-@app.route("/user/get_recommendations", methods=["GET"])
-def get_recommendations():
+@app.get("/user/{user_id}/get_recommendations", response_model=list[AlbumOut])
+async def get_recommendations(user_id: int, response: Response):
 
     full_recommendations_list = []
-    user_id = session.get("user_id")
+
     if not user_id:
-        return jsonify({"error": "User not logged in"}), 401
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return {"error": "User not logged in"}
 
-    with user_manager.connect() as conn:
-
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT album_id FROM recomandations WHERE user_id = ? ORDER BY RANDOM() LIMIT 10",
-            (user_id,),
+    recommendations = await database.fetch_all(
+            "SELECT album_id FROM recomandations WHERE user_id = :user_id ORDER BY RANDOM() LIMIT 10",
+            {'user_id': user_id}
         )
-        recommendations = cursor.fetchall()
-        recommendations_list = [album[0] for album in recommendations]
-        for album_id in recommendations_list:
+    recommendations_list = [album["album_id"] for album in recommendations]
+    for album_id in recommendations_list:
 
-            cursor.execute(
-                "SELECT album_name, artist_name, release_date, cover FROM albums WHERE album_id = ?",
-                (album_id,),
+            album_data = await database.fetch_one(
+                "SELECT album_id, album_name, artist_name, release_date, cover FROM albums WHERE album_id = :album_id",
+                {'album_id': album_id},
             )
-            row = cursor.fetchone()
-            album_data = {
-                "album_name": row[0],
-                "artist_name": row[1],
-                "release_date": row[2],
-                "cover": row[3],
-            }
             full_recommendations_list.append(album_data)
 
-    return jsonify({"recommendations": full_recommendations_list})
+    return full_recommendations_list
 
 
 if __name__ == "__main__":
