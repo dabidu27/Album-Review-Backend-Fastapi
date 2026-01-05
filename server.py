@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from init_db import database
 from fastapi import FastAPI, status, Response
-from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, FollowersOut, FollowingOut, UserProfileOut, ActivityOut
+from models import (
+AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, 
+FollowersOut, FollowingOut, UserProfileOut, ActivityOut, BioUpdate, PictureUpdate)
 
 
 app = FastAPI()
@@ -338,42 +340,34 @@ async def friends_activity(user_id: int, response: Response):
     return recent_activity
 
 
-@app.route("/user/update_bio", methods=["POST"])
-def update_bio():
+@app.put("/user/{user_id}/update_bio")
+async def update_bio(user_id: int, bio: BioUpdate, response: Response):
 
-    user_id = session.get("user_id")
     if not user_id:
-        return jsonify({"error": "User not logged in"}), 401
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return {"error": "User not logged in"}
 
-    data = request.json
-    bio = data.get("bio", "")
+    bio_text = bio.bio 
 
-    with user_manager.connect() as conn:
+    await database.execute("UPDATE users SET bio = :bio WHERE id = :id", {'bio': bio_text, 'id': user_id})
 
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET bio = ? WHERE id = ?", (bio, user_id))
-        conn.commit()
-
-    return jsonify({"message": "Bio successfully updated"}), 200
+    response.status_code = status.HTTP_200_OK
+    return {"message": "Bio successfully updated"}
 
 
-@app.route("/user/update_picture", methods=["POST"])
-def update_picture():
+@app.put("/user/{user_id}/update_picture")
+async def update_picture(user_id: int, picture: PictureUpdate, response: Response):
 
-    user_id = session.get("user_id")
     if not user_id:
-        return jsonify({"error": "User not logged in"}), 401
+        response.status_code = status.HTTP_401_UNAUTHORIZED
+        return {"error": "User not logged in"}
 
-    data = request.json
-    picture = data.get("picture", "")
+    picture_url = picture.picture
 
-    with user_manager.connect() as conn:
+    await database.execute("UPDATE users SET picture = :picture WHERE id = :id", {'picture': picture_url, 'id': user_id})
+    response.status_code = status.HTTP_200_OK
 
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET picture = ? WHERE id = ?", (picture, user_id))
-        conn.commit()
-
-    return jsonify({"message": "Profile picture successfully updated"}), 200
+    return {"message": "Profile picture successfully updated"}
 
 
 # RECOMANDATION ENGINE

@@ -84,3 +84,13 @@ class ActivityOut(BaseModel):
     cover: str
     rating: int
     review: Optional[str] = ""
+
+
+class BioUpdate(BaseModel):
+
+    bio: str
+
+
+class PictureUpdate(BaseModel):
+
+    picture: str
