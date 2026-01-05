@@ -10,77 +10,6 @@ from init_db import database
 
 class UserManager:
 
-    # REGISTER, LOGIN
-    def register_user(self, username, password):
-
-        password_hash = generate_password_hash(password)
-
-        try:
-
-            with self.connect() as conn:
-                cursor = conn.cursor()
-
-                cursor.execute(
-                    "INSERT INTO USERS (username, password_hash) VALUES" "(?, ?)",
-                    (username, password_hash),
-                )
-
-                conn.commit()
-
-            return True, "User registered successfully"
-
-        except sqlite3.IntegrityError:
-            return False, "Username already exists"
-
-    def login_user(self, username, password):
-
-        with self.connect() as conn:
-
-            cursor = conn.cursor()
-
-            cursor.execute(
-                "SELECT id, username, password_hash FROM users WHERE username == ?",
-                (username,),
-            )
-
-            row = cursor.fetchone()
-
-        if row is None:
-
-            return False, "User not found", None
-
-        password_hash = row[2]
-
-        if check_password_hash(password_hash, password):
-
-            return True, "Successful login", row[0]
-        else:
-            return False, "Wrong password", None
-
-    def change_user_password(self, username, new_password):
-
-        password_hash = generate_password_hash(new_password)
-
-        with self.connect() as conn:
-
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-            user = cursor.fetchone()
-
-            if not user:
-                return False, "User not found", None
-
-            user_id = user[0]
-            cursor.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?",
-                (password_hash, user_id),
-            )
-            conn.commit()
-
-            if cursor.rowcount == 0:
-                return False, "User not found"
-            return True, "Password updated successfully"
-
     # FAVORITES FUNCTIONS
     async def add_favourite(self, user_id, album_id):
 
@@ -182,180 +111,228 @@ class UserManager:
 
     # RECOMANDATION ENGINE
 
-    def other_albums_by_artist(self):
+    async def other_albums_by_artist(self):
 
         token = get_spotify_token()
 
-        with self.connect() as conn:
+        rows = await database.fetch_all(
+            """
+            SELECT r.album_id, r.user_id, a.artist_name
+            FROM reviews r
+            JOIN albums a ON r.album_id = a.album_id
+            WHERE r.rating >= 3
+            """
+        )
 
-            cursor = conn.cursor()
-            cursor.execute("SELECT album_id, user_id FROM reviews WHERE rating >= 3")
+        for row in rows:
 
-            rows = cursor.fetchall()
+            album_id = row["album_id"]
+            user_id = row["user_id"]
+            artist_name = row["artist_name"]
 
-            for row in rows:
+            artist_albums = search_for_artist_albums(token, artist_name)
 
-                id_album = row[0]
-                user_id = row[1]
+            for album in artist_albums:
 
-                cursor.execute(
-                    "SELECT a.artist_name FROM reviews r JOIN albums a ON r.album_id = a.album_id WHERE a.album_id = ?",
-                    (id_album,),
+                artist_album_id = album["id"]
+
+                if artist_album_id == album_id:
+                    continue
+
+                # Insert recommendation
+                await database.execute(
+                    """
+                    INSERT OR IGNORE INTO recomandations (user_id, album_id)
+                    VALUES (:user_id, :album_id)
+                    """,
+                    {
+                        "user_id": user_id,
+                        "album_id": artist_album_id,
+                    },
                 )
-                artist = cursor.fetchone()[0]
 
-                artist_albums = search_for_artist_albums(token, artist)
+                # Check if album already exists
+                existing_album = await database.fetch_one(
+                    "SELECT album_id FROM albums WHERE album_id = :album_id",
+                    {"album_id": artist_album_id},
+                )
 
-                for album in artist_albums:
+                if existing_album:
+                    continue
 
-                    artist_album_id = album["id"]
+                # Fetch album from Spotify
+                token = get_spotify_token()
+                album_data = search_for_album_by_id(token, artist_album_id)
 
-                    if artist_album_id != id_album:
+                # Insert album
+                await database.execute(
+                    """
+                    INSERT INTO albums (
+                        album_id,
+                        album_name,
+                        artist_name,
+                        artist_id,
+                        release_date,
+                        cover
+                    )
+                    VALUES (
+                        :album_id,
+                        :album_name,
+                        :artist_name,
+                        :artist_id,
+                        :release_date,
+                        :cover
+                    )
+                    """,
+                    {
+                        "album_id": album_data["id"],
+                        "album_name": album_data["name"],
+                        "artist_name": album_data["artists"][0]["name"],
+                        "artist_id": album_data["artists"][0]["id"],
+                        "release_date": album_data["release_date"],
+                        "cover": album_data["images"][0]["url"],
+                    },
+                )
 
-                        cursor.execute(
-                            "INSERT OR IGNORE INTO recomandations (user_id, album_id) VALUES (?, ?)",
-                            (user_id, artist_album_id),
-                        )
-                        cursor.execute(
-                            "SELECT album_id FROM albums where album_id = ?",
-                            (artist_album_id,),
-                        )
-                        album = cursor.fetchone()
-                        if not album:
-
-                            token = get_spotify_token()
-                            album = search_for_album_by_id(
-                                token, artist_album_id
-                            )  # returns a dictionary
-
-                            album_id = album["id"]
-                            album_name = album["name"]
-                            artist_name = album["artists"][0]["name"]
-                            artist_id = album["artists"][0]["id"]
-                            release_date = album["release_date"]
-                            cover = album["images"][0]["url"]
-                            cursor.execute(
-                                """
-                                            INSERT INTO albums (album_id, album_name, artist_name, artist_id, release_date, cover) VALUES (?, ?, ?, ?, ?, ?)
-                           """,
-                                (
-                                    album_id,
-                                    album_name,
-                                    artist_name,
-                                    artist_id,
-                                    release_date,
-                                    cover,
-                                ),
-                            )
-        conn.commit()
-
-    def albums_by_similar_artists(self):
+    async def albums_by_similar_artists(self):
 
         token = get_spotify_token()
 
-        with self.connect() as conn:
+        rows = await database.fetch_all(
+            """
+            SELECT r.album_id, r.user_id, a.artist_name
+            FROM reviews r
+            JOIN albums a ON r.album_id = a.album_id
+            WHERE r.rating >= 3
+            """
+        )
 
-            cursor = conn.cursor()
-            cursor.execute("SELECT album_id, user_id FROM reviews WHERE rating >= 3")
+        for row in rows:
 
-            rows = cursor.fetchall()
+            album_id = row["album_id"]
+            user_id = row["user_id"]
+            artist_name = row["artist_name"]
 
-            for row in rows:
+            related_artists = search_related_artists(token, artist_name)
 
-                album_id = row[0]
-                user_id = row[1]
+            for related_artist in related_artists:
 
-                cursor.execute(
-                    "SELECT a.artist_name FROM reviews r JOIN albums a ON r.album_id = a.album_id WHERE a.album_id = ?",
-                    (album_id,),
+                related_artist_name = related_artist["name"]
+
+                related_artist_albums = search_for_artist_albums(
+                    token, related_artist_name
                 )
-                artist = cursor.fetchone()[0]
 
-                related_artists = search_related_artists(token, artist)
+                for album in related_artist_albums:
 
-                for artist in related_artists:
+                    related_artist_album_id = album["id"]
 
-                    related_artist_name = artist["name"]
-                    related_artist_albums = search_for_artist_albums(
-                        token, related_artist_name
-                    )
-                    for album in related_artist_albums:
+                    if related_artist_album_id == album_id:
+                        continue
 
-                        related_artist_album_id = album["id"]
-
-                        if related_artist_album_id != album_id:
-
-                            cursor.execute(
-                                "INSERT OR IGNORE INTO recomandations (user_id, album_id) VALUES (?, ?)",
-                                (user_id, related_artist_album_id),
-                            )
-                            cursor.execute(
-                                "SELECT album_id FROM albums where album_id = ?",
-                                (related_artist_album_id,),
-                            )
-                            album = cursor.fetchone()
-                            if not album:
-
-                                token = get_spotify_token()
-                                album = search_for_album_by_id(
-                                    token, related_artist_album_id
-                                )  # returns a dictionary
-
-                                album_id = album["id"]
-                                album_name = album["name"]
-                                artist_name = album["artists"][0]["name"]
-                                artist_id = album["artists"][0]["id"]
-                                release_date = album["release_date"]
-                                cover = album["images"][0]["url"]
-                                cursor.execute(
-                                    """
-                                                INSERT INTO albums (album_id, album_name, artist_name, artist_id, release_date, cover) VALUES (?, ?, ?, ?, ?, ?)
-                            """,
-                                    (
-                                        album_id,
-                                        album_name,
-                                        artist_name,
-                                        artist_id,
-                                        release_date,
-                                        cover,
-                                    ),
-                                )
-            conn.commit()
-
-    def collaborative_filtering(self):
-
-        with self.connect() as conn:
-
-            cursor = conn.cursor()
-            cursor.execute("SELECT album_id, user_id FROM reviews WHERE rating >= 3")
-
-            rows = cursor.fetchall()
-
-            for row in rows:
-
-                album_id = row[0]
-                user_id = row[1]
-
-                cursor.execute(
-                    "SELECT DISTINCT user_id FROM reviews WHERE rating >= 3 AND album_id = ? AND user_id != ?",
-                    (album_id, user_id),
-                )
-                other_users = cursor.fetchall()
-
-                for other_user in other_users:
-
-                    cursor.execute(
-                        "SELECT album_id FROM reviews WHERE user_id = ? AND rating >= 3",
-                        (other_user[0],),
+                    await database.execute(
+                        """
+                        INSERT OR IGNORE INTO recomandations (user_id, album_id)
+                        VALUES (:user_id, :album_id)
+                        """,
+                        {
+                            "user_id": user_id,
+                            "album_id": related_artist_album_id,
+                        },
                     )
 
-                    albums_to_recommend = cursor.fetchall()
+                    existing_album = await database.fetch_one(
+                        "SELECT album_id FROM albums WHERE album_id = :album_id",
+                        {"album_id": related_artist_album_id},
+                    )
 
-                    for album in albums_to_recommend:
+                    if existing_album:
+                        continue
 
-                        cursor.execute(
-                            "INSERT OR IGNORE INTO recomandations (user_id, album_id) VALUES (?, ?)",
-                            (user_id, album[0]),
+                    token = get_spotify_token()
+                    album_data = search_for_album_by_id(token, related_artist_album_id)
+
+                    await database.execute(
+                        """
+                        INSERT INTO albums (
+                            album_id,
+                            album_name,
+                            artist_name,
+                            artist_id,
+                            release_date,
+                            cover
                         )
+                        VALUES (
+                            :album_id,
+                            :album_name,
+                            :artist_name,
+                            :artist_id,
+                            :release_date,
+                            :cover
+                        )
+                        """,
+                        {
+                            "album_id": album_data["id"],
+                            "album_name": album_data["name"],
+                            "artist_name": album_data["artists"][0]["name"],
+                            "artist_id": album_data["artists"][0]["id"],
+                            "release_date": album_data["release_date"],
+                            "cover": album_data["images"][0]["url"],
+                        },
+                    )
 
-            conn.commit()
+    async def collaborative_filtering(self):
+
+        rows = await database.fetch_all(
+            """
+            SELECT album_id, user_id
+            FROM reviews
+            WHERE rating >= 3
+            """
+        )
+
+        for row in rows:
+
+            album_id = row["album_id"]
+            user_id = row["user_id"]
+
+            other_users = await database.fetch_all(
+                """
+                SELECT DISTINCT user_id
+                FROM reviews
+                WHERE rating >= 3
+                AND album_id = :album_id
+                AND user_id != :user_id
+                """,
+                {
+                    "album_id": album_id,
+                    "user_id": user_id,
+                },
+            )
+
+            for other_user in other_users:
+
+                other_user_id = other_user["user_id"]
+
+                albums_to_recommend = await database.fetch_all(
+                    """
+                    SELECT album_id
+                    FROM reviews
+                    WHERE user_id = :other_user_id
+                    AND rating >= 3
+                    """,
+                    {"other_user_id": other_user_id},
+                )
+
+                for album in albums_to_recommend:
+
+                    await database.execute(
+                        """
+                        INSERT OR IGNORE INTO recomandations (user_id, album_id)
+                        VALUES (:user_id, :album_id)
+                        """,
+                        {
+                            "user_id": user_id,
+                            "album_id": album["album_id"],
+                        },
+                    )
