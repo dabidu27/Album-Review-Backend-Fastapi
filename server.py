@@ -481,7 +481,3 @@ async def get_recommendations(user_id: int):
     """
 
     return await database.fetch_all(query, {"user_id": user_id})
-
-
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
