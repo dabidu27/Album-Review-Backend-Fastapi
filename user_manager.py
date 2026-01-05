@@ -146,27 +146,22 @@ class UserManager:
 
         return True, "Successfully unfollowed user"
 
-    def get_followers(self, user_id):
+    async def get_followers(self, user_id):
 
-        with self.connect() as conn:
-
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT u.id, u.username
+        rows = await database.fetch_all(
+            """
+                SELECT u.id as id, u.username as username
                 FROM followers f
                 JOIN users u
                 ON f.follower_id = u.id
-                WHERE f.follower_id = ?
+                WHERE f.followed_id = :user_id
             """,
-                (int(user_id),),
-            )
+            {"user_id": int(user_id)},
+        )
 
-            rows = cursor.fetchall()
+        followers = [{"id": row["id"], "username": row["username"]} for row in rows]
 
-            followers = [{"id": row[0], "username": row[1]} for row in rows]
-
-            return followers
+        return followers
 
     def get_following(self, user_id):
 

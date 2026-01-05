@@ -43,3 +43,9 @@ class FavoritesOut(BaseModel):
 class FollowDelete(BaseModel):
 
     user_id: int
+
+
+class FollowersOut(BaseModel):
+
+    id: int
+    username: str
