@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from init_db import database
 from fastapi import FastAPI, status, Response
-from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, FollowersOut
+from models import AlbumOut, ReviewCreate, ReviewDelete, FavoriteCreate, FollowerCreate, FavoritesOut, FollowDelete, FollowersOut, FollowingOut
 
 
 app = FastAPI()
@@ -231,11 +231,13 @@ async def follower(user_id: int):
     return followers_return
 
 
-@app.route("/user/<user_id>/get_following", methods=["GET"])
-def following(user_id):
-    following = user_manager.get_following(user_id)
-    return jsonify(following)
-
+@app.get("/user/{user_id}/get_following", response_model=list[FollowingOut], status_code=status.HTTP_200_OK)
+async def following(user_id):
+    followings = await user_manager.get_following(user_id)
+    followings_return: list[FollowingOut] = []
+    for following in followings:
+        followings_return.append(following)
+    return followings_return
 
 # USER PROFILE
 @app.route("/user/<username>/profile", methods=["GET"])

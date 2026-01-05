@@ -49,3 +49,9 @@ class FollowersOut(BaseModel):
 
     id: int
     username: str
+
+
+class FollowingOut(BaseModel):
+
+    id: int
+    username: str
