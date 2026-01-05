@@ -21,6 +21,12 @@ class Token(BaseModel):
     token_type: str
 
 
+class User(BaseModel):
+
+    id: int
+    username: str
+
+
 class AlbumOut(BaseModel):
 
     album_id: str

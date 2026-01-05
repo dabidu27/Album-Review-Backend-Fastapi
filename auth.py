@@ -3,7 +3,10 @@ from dotenv import load_dotenv
 import os
 from fastapi.security import OAuth2PasswordBearer
 from datetime import datetime, timedelta
-from jose import jwt
+from jose import jwt, JWTError
+from fastapi import Depends, HTTPException, status
+from init_db import database
+from models import User
 
 
 load_dotenv()
@@ -38,3 +41,40 @@ def create_access_token(data, expires_minutes):
     when_expires = datetime.utcnow() + timedelta(minutes=expires_minutes)
     to_encode["exp"] = when_expires  # we add an expiration timestamp to the token
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+# Depends = (oauth2scheme) means: before running the get_current_user function, run the oauth2scheme function on the request, to extract the jwt token
+async def get_current_user(
+    token: str = Depends(oauth2scheme),
+) -> User:  # we return the Pydantic User model
+
+    # to get the current user (their id), we have to decode the jwt token
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub", None)
+        if user_id is None:
+
+            raise credentials_exception
+
+    except JWTError:
+
+        raise credentials_exception
+
+    user = await database.fetch_one(
+        "select id, username from users where id = :user_id",
+        {"user_id": int(user_id)},
+    )
+
+    if user is None:
+        raise credentials_exception
+
+    return User(
+        id=user["id"], username=user["username"]
+    )  # we create the Pydantic class object using the dict given by the db query

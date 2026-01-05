@@ -5,7 +5,7 @@ from spotify import get_spotify_token, search_for_artist_albums, search_for_albu
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from init_db import database
-from fastapi import FastAPI, status, Response, HTTPException
+from fastapi import FastAPI, status, Response, HTTPException, Depends
 from models import (
     AlbumOut,
     ReviewCreate,
@@ -22,8 +22,9 @@ from models import (
     PictureUpdate,
     UserRegister,
     UserLogin,
+    User,
 )
-from auth import hash_password, verify_password, create_access_token
+from auth import hash_password, verify_password, create_access_token, get_current_user
 
 app = FastAPI()
 review_manager = ReviewManager()
@@ -235,13 +236,13 @@ async def add_to_favorites(album_id, add: FavoriteCreate, response: Response):
 
 
 @app.get(
-    "/user/{user_id}/get_favorites",
+    "/user/get_favorites",
     response_model=list[FavoritesOut],
     status_code=status.HTTP_200_OK,
 )
-async def get_user_favorites(user_id: int):
+async def get_user_favorites(user: User = Depends(get_current_user)):
 
-    favorites = await user_manager.get_favorites(user_id)
+    favorites = await user_manager.get_favorites(user.id)
 
     favorites_list: list[FavoritesOut] = []
     for row in favorites:
