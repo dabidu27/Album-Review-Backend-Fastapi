@@ -84,7 +84,7 @@ async def login(credentials: UserLogin):
 
     if not verify_password(credentials.password, hashed_password):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Wrong password"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong password"
         )
 
     # after the user credentials are verified, we have to return a jwt token
@@ -225,7 +225,7 @@ async def delete_rate(album_id: str, user: User = Depends(get_current_user)):
 
 
 @app.post("/album/{album_id}/add_favorite", status_code=status.HTTP_201_CREATED)
-async def add_to_favorites(album_id, user: User = Depends(get_current_user)):
+async def add_to_favorites(album_id: str, user: User = Depends(get_current_user)):
 
     user_id = user.id
     success, message = await user_manager.add_favourite(user_id, album_id)
@@ -253,9 +253,9 @@ async def get_user_favorites(user: User = Depends(get_current_user)):
 
 # FOLLOWERS FUNCTIONS
 @app.post("/user/{followed_username}/follow", status_code=status.HTTP_200_OK)
-async def follow(followed_username: str, follow: FollowerCreate):
+async def follow(followed_username: str, user: User = Depends(get_current_user)):
 
-    follower_id = follow.user_id
+    follower_id = user.id
 
     if not follower_id:
         raise HTTPException(
@@ -267,6 +267,12 @@ async def follow(followed_username: str, follow: FollowerCreate):
         {"username": followed_username},
     )
 
+    if not followed_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
     success, message = await user_manager.follow_user(follower_id, followed_id["id"])
 
     if not success:
@@ -276,9 +282,9 @@ async def follow(followed_username: str, follow: FollowerCreate):
 
 
 @app.delete("/user/{followed_id}/unfollow", status_code=status.HTTP_200_OK)
-async def unfollow(followed_id: int, follower: FollowDelete):
+async def unfollow(followed_id: int, user: User = Depends(get_current_user)):
 
-    follower_id = follower.user_id
+    follower_id = user.id
 
     if not follower_id:
         raise HTTPException(
