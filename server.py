@@ -224,13 +224,12 @@ async def delete_rate(album_id: str, delete: ReviewDelete, response: Response):
 # FAVORITES FUNCTION
 
 
-@app.post("/album/{album_id}/add_favorite")
-async def add_to_favorites(album_id, add: FavoriteCreate, response: Response):
+@app.post("/album/{album_id}/add_favorite", status_code=status.HTTP_201_CREATED)
+async def add_to_favorites(album_id, add: FavoriteCreate):
 
     success, message = await user_manager.add_favourite(add.user_id, album_id)
-    response.status_code = response.status_code = (
-        status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
-    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
     return {"message": message}
 
@@ -252,15 +251,15 @@ async def get_user_favorites(user: User = Depends(get_current_user)):
 
 
 # FOLLOWERS FUNCTIONS
-@app.post("/user/{followed_username}/follow")
-async def follow(followed_username: str, follow: FollowerCreate, response: Response):
+@app.post("/user/{followed_username}/follow", status_code=status.HTTP_200_OK)
+async def follow(followed_username: str, follow: FollowerCreate):
 
     follower_id = follow.user_id
 
     if not follower_id:
-
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        return {"error": "User has to be logged in"}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User has to be logged in"
+        )
 
     followed_id = await database.fetch_one(
         "SELECT id FROM users WHERE username = :username",
@@ -269,39 +268,37 @@ async def follow(followed_username: str, follow: FollowerCreate, response: Respo
 
     success, message = await user_manager.follow_user(follower_id, followed_id)
 
-    response.status_code = (
-        status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
-    )
+    if not success:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=message)
 
     return {"message": message}
 
 
-@app.delete("/user/{followed_id}/unfollow")
-async def unfollow(followed_id: int, follower: FollowDelete, response: Response):
+@app.delete("/user/{followed_id}/unfollow", status_code=status.HTTP_200_OK)
+async def unfollow(followed_id: int, follower: FollowDelete):
 
     follower_id = follower.user_id
 
     if not follower_id:
-
-        response.status_code = status.HTTP_401_UNAUTHORIZED
-        return {"error": "User has to be logged in"}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User has to be logged in"
+        )
 
     success, message = await user_manager.unfollow_user(follower_id, followed_id)
 
-    response.status_code = (
-        status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
-    )
+    if not success:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=message)
 
     return {"message": message}
 
 
 @app.get(
-    "/user/{user_id}/get_followers",
+    "/user/get_followers",
     response_model=list[FollowersOut],
     status_code=status.HTTP_200_OK,
 )
-async def get_follower(user_id: int):
-    followers = await user_manager.get_followers(user_id)
+async def get_follower(user: User = Depends(get_current_user)):
+    followers = await user_manager.get_followers(user.id)
     followers_return: list[FollowersOut] = []
     for follower in followers:
         followers_return.append(follower)
@@ -309,12 +306,12 @@ async def get_follower(user_id: int):
 
 
 @app.get(
-    "/user/{user_id}/get_following",
+    "/user/get_following",
     response_model=list[FollowingOut],
     status_code=status.HTTP_200_OK,
 )
-async def get_following(user_id):
-    followings = await user_manager.get_following(user_id)
+async def get_following(user: User = Depends(get_current_user)):
+    followings = await user_manager.get_following(user.id)
     followings_return: list[FollowingOut] = []
     for following in followings:
         followings_return.append(following)
@@ -322,16 +319,21 @@ async def get_following(user_id):
 
 
 # USER PROFILE
-@app.get("/user/{username}/profile", response_model=UserProfileOut)
-async def get_profile(username, response: Response):
+@app.get(
+    "/user/{username}/profile",
+    response_model=UserProfileOut,
+    status_code=status.HTTP_200_OK,
+)
+async def get_profile(username):
 
     user = await database.fetch_one(
         "SELECT id, username, bio, picture FROM users WHERE LOWER(username) = :username",
         {"username": username.lower()},
     )
-    if not user:
-        response.status_code = status.HTTP_404_NOT_FOUND
-        return {"error": "User not found"}
+    if not user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     user_data = {
         "id": user["id"],
@@ -370,22 +372,22 @@ async def get_profile(username, response: Response):
     reviews = await review_manager.get_user_reviews(user["id"])
     user_data["reviews"] = reviews  # same as with favorites
 
-    response.status_code = status.HTTP_200_OK
     return user_data  # now the user_data dictionary matches the name of the keys with the fields of the Pydantic model and
     # the data types, so serialization is done by Fastapi
 
 
-@app.get("/user/{user_id}/profile", response_model=UserProfileOut)
-async def get_own_profile(user_id: int, response: Response):
+@app.get("/user/profile", response_model=UserProfileOut, status_code=status.HTTP_200_OK)
+async def get_own_profile(user: User = Depends(get_current_user)):
 
     user = await database.fetch_one(
         "SELECT id, username, bio, picture FROM users WHERE id = :user_id",
-        {"user_id": user_id},
+        {"user_id": user.id},
     )
 
     if not user:
-        response.status_code = status.HTTP_404_NOT_FOUND
-        return {"error": "User not found"}
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
 
     favorites = await database.fetch_all(
         """
@@ -414,47 +416,52 @@ async def get_own_profile(user_id: int, response: Response):
     reviews = await review_manager.get_user_reviews(user["id"])
     user["reviews"] = reviews
 
-    response.status_code = status.HTTP_200_OK
     return user
 
 
-@app.get("/user/{user_id}/friends_activity", response_model=list[ActivityOut])
-async def friends_activity(user_id: int, response: Response):
+@app.get(
+    "/user/friends_activity",
+    response_model=list[ActivityOut],
+    status_code=status.HTTP_200_OK,
+)
+async def friends_activity(user: User = Depends(get_current_user)):
 
-    recent_activity = await review_manager.friends_recent_activity(user_id)
-
-    response.status_code = status.HTTP_200_OK
+    recent_activity = await review_manager.friends_recent_activity(user.id)
     return recent_activity
 
 
-@app.put("/user/{user_id}/update_bio", status_code=status.HTTP_200_OK)
-async def update_bio(user_id: int, bio: BioUpdate, response: Response):
+@app.put("/user/update_bio", status_code=status.HTTP_200_OK)
+async def update_bio(bio: BioUpdate, user: User = Depends(get_current_user)):
 
-    if not user_id:
-        response.status_code = status.HTTP_401_UNAUTHORIZED
-        return {"error": "User not logged in"}
+    if not user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not logged in"
+        )
 
     bio_text = bio.bio
 
     await database.execute(
-        "UPDATE users SET bio = :bio WHERE id = :id", {"bio": bio_text, "id": user_id}
+        "UPDATE users SET bio = :bio WHERE id = :id", {"bio": bio_text, "id": user.id}
     )
 
     return {"message": "Bio successfully updated"}
 
 
-@app.put("/user/{user_id}/update_picture", status_code=status.HTTP_200_OK)
-async def update_picture(user_id: int, picture: PictureUpdate, response: Response):
+@app.put("/user/update_picture", status_code=status.HTTP_200_OK)
+async def update_picture(
+    picture: PictureUpdate, user: User = Depends(get_current_user)
+):
 
-    if not user_id:
-        response.status_code = status.HTTP_401_UNAUTHORIZED
-        return {"error": "User not logged in"}
+    if not user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not logged in"
+        )
 
     picture_url = picture.picture
 
     await database.execute(
         "UPDATE users SET picture = :picture WHERE id = :id",
-        {"picture": picture_url, "id": user_id},
+        {"picture": picture_url, "id": user.id},
     )
 
     return {"message": "Profile picture successfully updated"}
@@ -463,8 +470,8 @@ async def update_picture(user_id: int, picture: PictureUpdate, response: Respons
 # RECOMANDATION ENGINE
 
 
-@app.get("/user/{user_id}/get_recommendations", response_model=list[AlbumOut])
-async def get_recommendations(user_id: int):
+@app.get("/user/get_recommendations", response_model=list[AlbumOut])
+async def get_recommendations(user: User = Depends(get_current_user)):
 
     query = """
         SELECT
@@ -480,4 +487,4 @@ async def get_recommendations(user_id: int):
         LIMIT 10
     """
 
-    return await database.fetch_all(query, {"user_id": user_id})
+    return await database.fetch_all(query, {"user_id": user.id})
