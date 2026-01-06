@@ -70,11 +70,11 @@ async def register(user: UserRegister):
 
 
 @app.post("/login", status_code=status.HTTP_200_OK)
-async def login(user: UserLogin):
+async def login(credentials: UserLogin):
 
     user = await database.fetch_one(
         "select id, username, password_hash from users where username = :username",
-        {"username": user.username},
+        {"username": credentials.username},
     )
     if not user:
         raise HTTPException(
@@ -82,7 +82,7 @@ async def login(user: UserLogin):
         )
     hashed_password = user["password_hash"]
 
-    if not verify_password(user.password, hashed_password):
+    if not verify_password(credentials.password, hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Wrong password"
         )
@@ -266,7 +266,7 @@ async def follow(followed_username: str, follow: FollowerCreate):
         {"username": followed_username},
     )
 
-    success, message = await user_manager.follow_user(follower_id, followed_id)
+    success, message = await user_manager.follow_user(follower_id, followed_id["id"])
 
     if not success:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=message)
@@ -330,7 +330,7 @@ async def get_profile(username):
         "SELECT id, username, bio, picture FROM users WHERE LOWER(username) = :username",
         {"username": username.lower()},
     )
-    if not user.id:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
