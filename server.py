@@ -25,6 +25,7 @@ from models import (
     User,
 )
 from auth import hash_password, verify_password, create_access_token, get_current_user
+from fastapi.security import OAuth2PasswordRequestForm
 
 app = FastAPI()
 review_manager = ReviewManager()
@@ -70,11 +71,11 @@ async def register(user: UserRegister):
 
 
 @app.post("/login", status_code=status.HTTP_200_OK)
-async def login(credentials: UserLogin):
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
     user = await database.fetch_one(
         "select id, username, password_hash from users where username = :username",
-        {"username": credentials.username},
+        {"username": form_data.username},
     )
     if not user:
         raise HTTPException(
@@ -82,7 +83,7 @@ async def login(credentials: UserLogin):
         )
     hashed_password = user["password_hash"]
 
-    if not verify_password(credentials.password, hashed_password):
+    if not verify_password(form_data.password, hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong password"
         )
@@ -91,7 +92,7 @@ async def login(credentials: UserLogin):
 
     token = create_access_token({"sub": str(user["id"])})
 
-    return {"token": token, "token_type": "bearer"}
+    return {"access_token": token, "token_type": "bearer"}
 
 
 # REVIEWS FUNCTIONS
@@ -102,7 +103,9 @@ async def login(credentials: UserLogin):
     response_model=list[AlbumOut],
     status_code=status.HTTP_200_OK,
 )
-async def search_artists_albums(artist_name: str):
+async def search_artists_albums(
+    artist_name: str, user: User = Depends(get_current_user)
+):  # we don t need current user data here, but by adding the dependency the request will wait for the JWT Token, so only logged in user can use this
 
     token = get_spotify_token()
     albums_list: list[AlbumOut] = []
@@ -137,12 +140,13 @@ async def search_artists_albums(artist_name: str):
     response_model=list[AlbumOut],
     status_code=status.HTTP_200_OK,
 )
-async def search_album(album_name: str):
+async def search_album(album_name: str, user: User = Depends(get_current_user)):
 
+    pattern = f"%{album_name}%"
     existing = await database.fetch_one(
-        "SELECT * FROM albums WHERE album_name = :album_name",
+        "SELECT * FROM albums WHERE lower(album_name) ILIKE lower(:pattern)",
         {
-            "album_name": album_name
+            "pattern": pattern
         },  # as before, :album_name is a placeholder, which will be replaced by the album_name variable passed to the function
     )
 
@@ -169,8 +173,8 @@ async def search_album(album_name: str):
         )
 
     albums = await database.fetch_all(
-        "SELECT * FROM albums WHERE album_name = :album_name",
-        {"album_name": album_name},
+        "SELECT * FROM albums WHERE lower(album_name) ILIKE lower(:pattern)",
+        {"pattern": pattern},
     )
     result: list[AlbumOut] = []
     result = [
@@ -331,7 +335,7 @@ async def get_following(user: User = Depends(get_current_user)):
     response_model=UserProfileOut,
     status_code=status.HTTP_200_OK,
 )
-async def get_profile(username):
+async def get_profile(username, user: User = Depends(get_current_user)):
 
     user = await database.fetch_one(
         "SELECT id, username, bio, picture FROM users WHERE LOWER(username) = :username",

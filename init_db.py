@@ -91,6 +91,3 @@ async def main():
     await database.execute(CREATE_RECOMMENDATIONS_TABLE)
 
     await database.disconnect()
-
-
-asyncio.run(main())

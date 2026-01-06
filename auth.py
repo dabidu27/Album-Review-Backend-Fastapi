@@ -19,7 +19,7 @@ oauth2scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 # oauth2scheme reads header requests, finds 'Authorization', extracts the token after Bearer and will pass it to get_current_user function
 # Authorization: Bearer <JWT_TOKEN>
-# tokenUrl = '/login' is only for swagger UI
+# tokenUrl = '/login' is only for swagger UI to know where to get the JWT token from
 def hash_password(password):
 
     return pwd_context.hash(password)
@@ -30,7 +30,7 @@ def verify_password(password, hashed_password):
     return pwd_context.verify(password, hashed_password)
 
 
-def create_access_token(data, expires_minutes):
+def create_access_token(data, expires_minutes=ACCESS_TOKEN_EXPIRE_MINUTES):
 
     # a JWT token is usually composed of 2 elements: sub - subject, who the token is about; our subject will be the user_id, passed thorugh data as a string
     # and exp - expire_date, when the token expire
