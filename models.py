@@ -39,7 +39,6 @@ class AlbumOut(BaseModel):
 
 class ReviewCreate(BaseModel):
 
-    user_id: int
     rating: int = Field(ge=0, lt=5)
     review: Optional[str] = ""
 

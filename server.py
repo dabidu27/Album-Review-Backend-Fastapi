@@ -192,31 +192,31 @@ async def search_album(album_name: str):
 # LATER, WHEN WE HAVE AUTH, WE WILL DO IT WITH Depends(get_current_user)
 
 
-@app.post("/album/{album_id}/rating")
+@app.post("/album/{album_id}/rating", status_code=status.HTTP_200_OK)
 async def rate_album(
-    album_id: str, review: ReviewCreate, response: Response
+    album_id: str, review: ReviewCreate, user: User = Depends(get_current_user)
 ):  # review is an object of the ReviewCreate Pydantic class
 
+    user_id = user.id
     success, message = await review_manager.add_review(
-        review.user_id, album_id, review.rating, review.review
+        user_id, album_id, review.rating, review.review
     )
     # add_review has async calls, and this call should also be await
 
-    response.status_code = (
-        status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
-    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
     return {"message": message}  # fastapi automatically serializes this to json
 
 
-@app.delete("/album/{album_id}/delete_rating")
-async def delete_rate(album_id: str, delete: ReviewDelete, response: Response):
+@app.delete("/album/{album_id}/delete_rating", status_code=status.HTTP_200_OK)
+async def delete_rate(album_id: str, user: User = Depends(get_current_user)):
 
-    success, message = await review_manager.delete_review(delete.user_id, album_id)
+    user_id = user.id
+    success, message = await review_manager.delete_review(user_id, album_id)
 
-    response.status_code = (
-        status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST
-    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
     return {"message": message}
 
@@ -225,9 +225,10 @@ async def delete_rate(album_id: str, delete: ReviewDelete, response: Response):
 
 
 @app.post("/album/{album_id}/add_favorite", status_code=status.HTTP_201_CREATED)
-async def add_to_favorites(album_id, add: FavoriteCreate):
+async def add_to_favorites(album_id, user: User = Depends(get_current_user)):
 
-    success, message = await user_manager.add_favourite(add.user_id, album_id)
+    user_id = user.id
+    success, message = await user_manager.add_favourite(user_id, album_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
