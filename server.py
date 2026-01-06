@@ -487,7 +487,7 @@ async def get_recommendations(user: User = Depends(get_current_user)):
             a.artist_name,
             a.release_date,
             a.cover
-        FROM recomandations r
+        FROM recommendations r
         JOIN albums a ON a.album_id = r.album_id
         WHERE r.user_id = :user_id
         ORDER BY RANDOM()

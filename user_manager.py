@@ -1,4 +1,3 @@
-import sqlite3
 from spotify import (
     get_spotify_token,
     search_for_album_by_id,
@@ -142,8 +141,9 @@ class UserManager:
                 # Insert recommendation
                 await database.execute(
                     """
-                    INSERT OR IGNORE INTO recomandations (user_id, album_id)
+                    INSERT INTO recommendations (user_id, album_id)
                     VALUES (:user_id, :album_id)
+                    ON CONFLICT (user_id, album_id) DO NOTHING
                     """,
                     {
                         "user_id": user_id,
@@ -232,8 +232,9 @@ class UserManager:
 
                     await database.execute(
                         """
-                        INSERT OR IGNORE INTO recomandations (user_id, album_id)
+                        INSERT INTO recommendations (user_id, album_id)
                         VALUES (:user_id, :album_id)
+                        ON CONFLICT (user_id, album_id) DO NOTHING
                         """,
                         {
                             "user_id": user_id,
@@ -328,8 +329,9 @@ class UserManager:
 
                     await database.execute(
                         """
-                        INSERT OR IGNORE INTO recomandations (user_id, album_id)
+                        INSERT INTO recommendations (user_id, album_id)
                         VALUES (:user_id, :album_id)
+                        ON CONFLICT (user_id, album_id) DO NOTHING
                         """,
                         {
                             "user_id": user_id,
