@@ -36,7 +36,7 @@ user_manager = UserManager()
 # CORS setup to allow frontend access during development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development; restrict in production
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
