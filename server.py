@@ -108,9 +108,9 @@ async def search_artists_albums(
     artist_name: str, user: User = Depends(get_current_user)
 ):  # we don t need current user data here, but by adding the dependency the request will wait for the JWT Token, so only logged in user can use this
 
-    token = get_spotify_token()
+    token = await get_spotify_token()
     albums_list: list[AlbumOut] = []
-    albums = search_for_artist_albums(token, artist_name)
+    albums = await search_for_artist_albums(token, artist_name)
     for album in albums:
         album_data = AlbumOut(
             album_id=album["id"],
@@ -153,8 +153,8 @@ async def search_album(album_name: str, user: User = Depends(get_current_user)):
 
     if not existing:
 
-        token = get_spotify_token()
-        album = search_for_album(token, album_name)  # returns a dictionary
+        token = await get_spotify_token()
+        album = await search_for_album(token, album_name)  # returns a dictionary
 
         album_data = AlbumOut(
             album_id=album["id"],

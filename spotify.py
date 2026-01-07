@@ -2,13 +2,16 @@ from dotenv import load_dotenv
 import os
 import base64
 import requests
+import httpx  # we cannot use requests with await, we need httpx which is a modern http library replacing requests
+
+# we have httpx.AsyncClient which is the async version
 
 load_dotenv()
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 
-def get_spotify_token():
+async def get_spotify_token():
 
     url = "https://accounts.spotify.com/api/token"
 
@@ -23,7 +26,8 @@ def get_spotify_token():
 
     data = {"grant_type": "client_credentials"}
 
-    response = requests.post(url, data=data, headers=headers)
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, data=data, headers=headers)
 
     json_result = response.json()
     token = json_result["access_token"]
@@ -31,7 +35,7 @@ def get_spotify_token():
     return token
 
 
-def search_for_artist_id(token, artist_name):
+async def search_for_artist_id(token, artist_name):
 
     url = "https://api.spotify.com/v1/search"
 
@@ -39,7 +43,8 @@ def search_for_artist_id(token, artist_name):
 
     params = {"q": artist_name, "type": "artist", "limit": "1"}
 
-    response = requests.get(url, params=params, headers=headers)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, params=params, headers=headers)
 
     json_result = response.json()
 
@@ -51,9 +56,9 @@ def search_for_artist_id(token, artist_name):
     return artist_id
 
 
-def search_for_artist_albums(token, artist_name):
+async def search_for_artist_albums(token, artist_name):
 
-    artist_id = search_for_artist_id(token, artist_name)
+    artist_id = await search_for_artist_id(token, artist_name)
 
     url = f"https://api.spotify.com/v1/artists/{artist_id}/albums"
 
@@ -61,7 +66,8 @@ def search_for_artist_albums(token, artist_name):
 
     params = {"include_groups": "album"}
 
-    response = requests.get(url, headers=headers, params=params)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers, params=params)
 
     json_result = response.json()
 
@@ -70,7 +76,7 @@ def search_for_artist_albums(token, artist_name):
     return albums
 
 
-def search_for_album(token, album_name):
+async def search_for_album(token, album_name):
 
     url = "https://api.spotify.com/v1/search"
 
@@ -78,7 +84,8 @@ def search_for_album(token, album_name):
 
     params = {"q": album_name, "type": "album", "limit": 1}
 
-    response = requests.get(url, headers=headers, params=params)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers, params=params)
 
     json_result = response.json()
 
@@ -87,33 +94,36 @@ def search_for_album(token, album_name):
     return album
 
 
-def search_for_album_by_id(token, album_id):
+async def search_for_album_by_id(token, album_id):
 
     url = "https://api.spotify.com/v1/albums"
 
     headers = {"Authorization": f"Bearer {token}"}
     params = {"ids": {album_id}}
 
-    response = requests.get(url, headers=headers, params=params)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers, params=params)
 
     album = response.json()
 
     return album["albums"][0]
 
 
-def search_related_artists(token, artist_name):
+async def search_related_artists(token, artist_name):
 
-    artist_id = search_for_artist_id(token, artist_name)
+    artist_id = await search_for_artist_id(token, artist_name)
 
     if not artist_id:
         print(f"Artist not found: {artist_name}")
         return []
 
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(
-        f"https://api.spotify.com/v1/artists/{artist_id}/related-artists",
-        headers=headers,
-    )
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://api.spotify.com/v1/artists/{artist_id}/related-artists",
+            headers=headers,
+        )
 
     json_result = response.json()
 

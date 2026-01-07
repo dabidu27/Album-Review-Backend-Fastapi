@@ -133,7 +133,7 @@ class UserManager:
 
     async def other_albums_by_artist(self):
 
-        token = get_spotify_token()
+        token = await get_spotify_token()
 
         rows = await database.fetch_all(
             """
@@ -150,7 +150,7 @@ class UserManager:
             user_id = row["user_id"]
             artist_name = row["artist_name"]
 
-            artist_albums = search_for_artist_albums(token, artist_name)
+            artist_albums = await search_for_artist_albums(token, artist_name)
 
             for album in artist_albums:
 
@@ -182,8 +182,8 @@ class UserManager:
                     continue
 
                 # Fetch album from Spotify
-                token = get_spotify_token()
-                album_data = search_for_album_by_id(token, artist_album_id)
+                token = await get_spotify_token()
+                album_data = await search_for_album_by_id(token, artist_album_id)
 
                 # Insert album
                 await database.execute(
@@ -217,7 +217,7 @@ class UserManager:
 
     async def albums_by_similar_artists(self):
 
-        token = get_spotify_token()
+        token = await get_spotify_token()
 
         rows = await database.fetch_all(
             """
@@ -234,13 +234,13 @@ class UserManager:
             user_id = row["user_id"]
             artist_name = row["artist_name"]
 
-            related_artists = search_related_artists(token, artist_name)
+            related_artists = await search_related_artists(token, artist_name)
 
             for related_artist in related_artists:
 
                 related_artist_name = related_artist["name"]
 
-                related_artist_albums = search_for_artist_albums(
+                related_artist_albums = await search_for_artist_albums(
                     token, related_artist_name
                 )
 
@@ -271,8 +271,10 @@ class UserManager:
                     if existing_album:
                         continue
 
-                    token = get_spotify_token()
-                    album_data = search_for_album_by_id(token, related_artist_album_id)
+                    token = await get_spotify_token()
+                    album_data = await search_for_album_by_id(
+                        token, related_artist_album_id
+                    )
 
                     await database.execute(
                         """
