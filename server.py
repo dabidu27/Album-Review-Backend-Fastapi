@@ -10,6 +10,7 @@ from models import (
     AlbumOut,
     ReviewCreate,
     ReviewDelete,
+    ReviewOut,
     FavoriteCreate,
     FollowerCreate,
     FavoritesOut,
@@ -240,24 +241,38 @@ async def add_to_favorites(album_id: str, user: User = Depends(get_current_user)
 
 
 @app.get(
-    "/user/get_favorites",
-    response_model=list[FavoritesOut],
+    "/user/{username}/get_favorites",
+    response_model=list[AlbumOut],
     status_code=status.HTTP_200_OK,
 )
-async def get_user_favorites(user: User = Depends(get_current_user)):
+async def get_user_favorites(username: str, user: User = Depends(get_current_user)):
 
-    favorites = await user_manager.get_favorites(user.id)
+    searched_user = await database.fetch_one(
+        "select id from users where username = :username", {"username": username}
+    )
+    if not searched_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    favorites = await user_manager.get_favorites(searched_user["id"])
 
-    favorites_list: list[FavoritesOut] = []
-    for row in favorites:
-        favorites_list.append(row)
-
-    return favorites_list
+    return favorites
 
 
 # FOLLOWERS FUNCTIONS
-@app.post("/user/{followed_username}/follow", status_code=status.HTTP_200_OK)
-async def follow(followed_username: str, user: User = Depends(get_current_user)):
+
+
+@app.get("/user/{username}/search", status_code=status.HTTP_200_OK, response_model=User)
+async def search_user(username: str, user: User = Depends(get_current_user)):
+
+    searched_user_id = await user_manager.search_user(username)
+    if not searched_user_id:
+        raise HTTPException(status_code=404, detail="User not found")
+    return User(id=searched_user_id, username=username)
+
+
+@app.post("/user/{followed_id}/follow", status_code=status.HTTP_200_OK)
+async def follow(followed_id: int, user: User = Depends(get_current_user)):
 
     follower_id = user.id
 
@@ -266,18 +281,7 @@ async def follow(followed_username: str, user: User = Depends(get_current_user))
             status_code=status.HTTP_400_BAD_REQUEST, detail="User has to be logged in"
         )
 
-    followed_id = await database.fetch_one(
-        "SELECT id FROM users WHERE username = :username",
-        {"username": followed_username},
-    )
-
-    if not followed_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
-    success, message = await user_manager.follow_user(follower_id, followed_id["id"])
+    success, message = await user_manager.follow_user(follower_id, followed_id)
 
     if not success:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=message)
@@ -355,18 +359,19 @@ async def get_profile(username, user: User = Depends(get_current_user)):
 
     favorites = await database.fetch_all(
         """
-            SELECT a.album_name as album_name, a.artist_name as artist_name, a.release_date as release_date, a.cover as cover
+            SELECT a.album_id as album_id, a.album_name as album_name, a.artist_id as artist_id, a.artist_name as artist_name, a.release_date as release_date, a.cover as cover
             FROM favorites f
             JOIN albums a ON f.album_id = a.album_id
             WHERE f.user_id = :user_id
         """,
         {"user_id": user_data["id"]},
     )
-    user_data["favorites"] = (
-        favorites  # we have favorites being a list[FavoritesOut] in the Pydantic model for UserProfileOut
-    )
-    # if the key of the dict returned by the database (called favorites) in this case match the Pydantic model fields
-    # (the fields of FavoritesOut in this case) the transition from dict to Pydantic model is automatically
+    user_data["favorites"] = [
+        AlbumOut(**dict(fav))
+        for fav in favorites  # we have favorites being a list[AlbumOut] in the Pydantic model for UserProfileOut
+    ]
+    # the sql query returnes a list of dictionaries with the same keys as the name of the fields of AlbumOut => favorites is that list of dicts
+    # so we create a list of AlbumOut objects, by unpacking the dict key-value pairs with the **operator
 
     row = await database.fetch_one(
         "SELECT COUNT(*) as count FROM followers WHERE followed_id = :user_id",
@@ -381,53 +386,80 @@ async def get_profile(username, user: User = Depends(get_current_user)):
     user_data["following_count"] = row["count"]
 
     reviews = await review_manager.get_user_reviews(user["id"])
-    user_data["reviews"] = reviews  # same as with favorites
+    user_data["reviews"] = [
+        ReviewOut(**dict(r)) for r in reviews
+    ]  # same as with favorites
 
-    return user_data  # now the user_data dictionary matches the name of the keys with the fields of the Pydantic model and
-    # the data types, so serialization is done by Fastapi
+    return UserProfileOut(
+        id=user_data["id"],
+        username=username,
+        bio=user_data["bio"],
+        picture=user_data["picture"],
+        favorites=user_data["favorites"],
+        followers_count=user_data["followers_count"],
+        following_count=user_data["following_count"],
+        reviews=user_data["reviews"],
+    )
 
 
 @app.get("/user/profile", response_model=UserProfileOut, status_code=status.HTTP_200_OK)
 async def get_own_profile(user: User = Depends(get_current_user)):
 
     user = await database.fetch_one(
-        "SELECT id, username, bio, picture FROM users WHERE id = :user_id",
-        {"user_id": user.id},
+        "SELECT id, username, bio, picture FROM users WHERE id = :id",
+        {"id": user.id},
     )
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+    user_data = {
+        "id": user["id"],
+        "username": user["username"],
+        "bio": user["bio"],
+        "picture": user["picture"],
+    }
 
     favorites = await database.fetch_all(
         """
-            SELECT a.album_name as album_name, a.artist_name as artist_name, a.release_date as release_date, a.cover as cover
+            SELECT a.album_id as album_id, a.album_name as album_name, a.artist_id as artist_id, a.artist_name as artist_name, a.release_date as release_date, a.cover as cover
             FROM favorites f
             JOIN albums a ON f.album_id = a.album_id
             WHERE f.user_id = :user_id
         """,
-        {"user_id": user["id"]},
+        {"user_id": user_data["id"]},
     )
-
-    user["favorites"] = favorites
+    user_data["favorites"] = [
+        AlbumOut(**dict(fav))
+        for fav in favorites  # we have favorites being a list[AlbumOut] in the Pydantic model for UserProfileOut
+    ]
+    # the sql query returnes a list of dictionaries with the same keys as the name of the fields of AlbumOut => favorites is that list of dicts
+    # so we create a list of AlbumOut objects, by unpacking the dict key-value pairs with the **operator
 
     row = await database.fetch_one(
         "SELECT COUNT(*) as count FROM followers WHERE followed_id = :user_id",
-        {"user_id": user["id"]},
+        {"user_id": user_data["id"]},
     )
-    user["followers_count"] = row["count"]
+    user_data["followers_count"] = row["count"]
 
     row = await database.fetch_one(
         "SELECT COUNT(*) as count FROM followers WHERE follower_id = :user_id",
-        {"user_id": user["id"]},
+        {"user_id": user_data["id"]},
     )
-    user["following_count"] = row["count"]
+    user_data["following_count"] = row["count"]
 
     reviews = await review_manager.get_user_reviews(user["id"])
-    user["reviews"] = reviews
+    user_data["reviews"] = [
+        ReviewOut(**dict(r)) for r in reviews
+    ]  # same as with favorites
 
-    return user
+    return UserProfileOut(
+        id=user_data["id"],
+        username=user_data["username"],
+        bio=user_data["bio"],
+        picture=user_data["picture"],
+        favorites=user_data["favorites"],
+        followers_count=user_data["followers_count"],
+        following_count=user_data["following_count"],
+        reviews=user_data["reviews"],
+    )
 
 
 @app.get(

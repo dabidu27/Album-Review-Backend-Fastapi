@@ -39,7 +39,7 @@ class AlbumOut(BaseModel):
 
 class ReviewCreate(BaseModel):
 
-    rating: int = Field(ge=0, lt=5)
+    rating: int = Field(ge=0, le=5)
     review: Optional[str] = ""
 
 
@@ -95,7 +95,7 @@ class UserProfileOut(BaseModel):
     username: str
     bio: str
     picture: str
-    favorites: list[FavoritesOut]
+    favorites: list[AlbumOut]
     followers_count: int
     following_count: int
     reviews: list[ReviewOut]

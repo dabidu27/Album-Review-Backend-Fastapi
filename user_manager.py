@@ -38,17 +38,38 @@ class UserManager:
     async def get_favorites(self, user_id):
 
         albums = await database.fetch_all(
-            "SELECT album_id FROM favorites WHERE user_id = :user_id",
+            "SELECT a.album_id as album_id, a.album_name as album_name, a.artist_id as artist_id, a.artist_name as artist_name, a.release_date as release_date, a.cover as cover FROM favorites f join albums a "
+            "on f.album_id = a.album_id WHERE user_id = :user_id",
             {"user_id": int(user_id)},
         )
 
         return albums
 
     # FOLLOWERS FUNCTIONS
+
+    async def search_user(self, username):
+
+        user = await database.fetch_one(
+            "select id from users where username = :username", {"username": username}
+        )
+
+        if not user:
+
+            return None
+
+        return user["id"]
+
     async def follow_user(self, follower_id, followed_id):
 
         if follower_id == followed_id:
             return False, "You cannot follow yourself"
+
+        existing = await database.execute(
+            "select * from users where id = :followed_id", {"followed_id": followed_id}
+        )
+
+        if not existing:
+            return False, "User not found"
 
         try:
 

@@ -45,6 +45,13 @@ class ReviewManager:
 
     async def delete_review(self, user_id, album_id):
 
+        existing = await database.fetch_one(
+            "select * from reviews where user_id = :user_id and album_id = :album_id",
+            {"user_id": int(user_id), "album_id": album_id},
+        )
+        if not existing:
+            return False, "Review not found"
+
         await database.execute(
             "DELETE FROM reviews WHERE user_id = :user_id AND album_id = :album_id",
             {"user_id": int(user_id), "album_id": album_id},
@@ -75,17 +82,17 @@ class ReviewManager:
 
         query = """
         SELECT
-            a.album_name,
-            a.artist_name,
-            a.cover,
-            r.rating,
-            r.review
-        FROM followers f
-        JOIN reviews r ON r.user_id = f.followed_id
-        JOIN albums a ON a.album_id = r.album_id
-        WHERE f.follower_id = :user_id
-          AND COALESCE(r.updated_at, r.created_at) >= datetime('now', '-7 days')
-        ORDER BY COALESCE(r.updated_at, r.created_at) DESC
+    a.album_name,
+    a.artist_name,
+    a.cover,
+    r.rating,
+    r.review
+FROM followers f
+JOIN reviews r ON r.user_id = f.followed_id
+JOIN albums a ON a.album_id = r.album_id
+WHERE f.follower_id = :user_id
+  AND COALESCE(r.updated_at, r.created_at) >= NOW() - INTERVAL '7 days'
+ORDER BY COALESCE(r.updated_at, r.created_at) DESC
         """
 
-        return database.fetch_all(query, {"use_id": user_id})
+        return await database.fetch_all(query, {"user_id": user_id})
