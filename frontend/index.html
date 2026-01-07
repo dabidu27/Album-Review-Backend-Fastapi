@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MusicBoxd - Music Review Platform</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>🎵 MusicBoxd</h1>
+            </div>
+            <div id="nav-links" class="nav-links" style="display: none;">
+                <button onclick="showSection('search')">Search</button>
+                <button onclick="showSection('profile')">My Profile</button>
+                <button onclick="showSection('activity')">Activity</button>
+                <button onclick="showSection('recommendations')">Recommendations</button>
+                <button onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Authentication Section -->
+    <section id="auth-section" class="section active">
+        <div class="auth-container">
+            <div class="auth-card">
+                <h2>Welcome to MusicBoxd</h2>
+                <p class="subtitle">Discover, review, and share music with friends</p>
+
+                <!-- Login Form -->
+                <div id="login-form" class="auth-form">
+                    <h3>Login</h3>
+                    <form onsubmit="handleLogin(event)">
+                        <input type="text" id="login-username" placeholder="Username" required>
+                        <input type="password" id="login-password" placeholder="Password" required>
+                        <button type="submit" class="btn-primary">Login</button>
+                    </form>
+                    <p class="switch-auth">Don't have an account? <a href="#" onclick="toggleAuthForm()">Register</a>
+                    </p>
+                </div>
+
+                <!-- Register Form -->
+                <div id="register-form" class="auth-form" style="display: none;">
+                    <h3>Register</h3>
+                    <form onsubmit="handleRegister(event)">
+                        <input type="text" id="register-username" placeholder="Username" required>
+                        <input type="email" id="register-email" placeholder="Email" required>
+                        <input type="password" id="register-password" placeholder="Password" required>
+                        <button type="submit" class="btn-primary">Register</button>
+                    </form>
+                    <p class="switch-auth">Already have an account? <a href="#" onclick="toggleAuthForm()">Login</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Search Section -->
+    <section id="search-section" class="section">
+        <div class="container">
+            <h2>Search Music</h2>
+
+            <div class="search-controls">
+                <div class="search-type">
+                    <button id="search-artist-btn" class="tab-btn active"
+                        onclick="setSearchType('artist')">Artist</button>
+                    <button id="search-album-btn" class="tab-btn" onclick="setSearchType('album')">Album</button>
+                </div>
+                <form onsubmit="handleSearch(event)" class="search-form">
+                    <input type="text" id="search-input" placeholder="Search for an artist or album..." required>
+                    <button type="submit" class="btn-primary">Search</button>
+                </form>
+            </div>
+
+            <div id="search-results" class="album-grid"></div>
+        </div>
+    </section>
+
+    <!-- Profile Section -->
+    <section id="profile-section" class="section">
+        <div class="container">
+            <div id="profile-content"></div>
+        </div>
+    </section>
+
+    <!-- Activity Section -->
+    <section id="activity-section" class="section">
+        <div class="container">
+            <h2>Friends Activity</h2>
+            <div id="activity-feed"></div>
+        </div>
+    </section>
+
+    <!-- Recommendations Section -->
+    <section id="recommendations-section" class="section">
+        <div class="container">
+            <h2>Recommended for You</h2>
+            <div id="recommendations-grid" class="album-grid"></div>
+        </div>
+    </section>
+
+    <!-- User Search Section -->
+    <section id="user-search-section" class="section">
+        <div class="container">
+            <h2>Find Users</h2>
+            <form onsubmit="handleUserSearch(event)" class="search-form">
+                <input type="text" id="user-search-input" placeholder="Search for users..." required>
+                <button type="submit" class="btn-primary">Search</button>
+            </form>
+            <div id="user-search-results"></div>
+        </div>
+    </section>
+
+    <!-- Album Modal -->
+    <div id="album-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeAlbumModal()">&times;</span>
+            <div id="album-details"></div>
+        </div>
+    </div>
+
+    <!-- Profile Edit Modal -->
+    <div id="edit-profile-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditModal()">&times;</span>
+            <h2>Edit Profile</h2>
+            <form onsubmit="handleUpdateProfile(event)">
+                <label>Bio:</label>
+                <textarea id="edit-bio" rows="4" placeholder="Tell us about yourself..."></textarea>
+                <label>Profile Picture URL:</label>
+                <input type="url" id="edit-picture" placeholder="https://example.com/image.jpg">
+                <button type="submit" class="btn-primary">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

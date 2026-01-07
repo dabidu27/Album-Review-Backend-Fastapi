@@ -27,10 +27,20 @@ from models import (
 )
 from auth import hash_password, verify_password, create_access_token, get_current_user
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 review_manager = ReviewManager()
 user_manager = UserManager()
+
+# CORS setup to allow frontend access during development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For development; restrict in production
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
