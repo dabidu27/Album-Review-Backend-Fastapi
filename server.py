@@ -33,7 +33,6 @@ app = FastAPI()
 review_manager = ReviewManager()
 user_manager = UserManager()
 
-# CORS setup to allow frontend access during development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
